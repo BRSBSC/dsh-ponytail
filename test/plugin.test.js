@@ -95,6 +95,14 @@ test('registers all 6 skills with source runtime', () => {
   assert.ok(ctx.rec.skills.every(s => s.source === 'runtime' && s.content && s.description))
 })
 
+test('the ponytail skill is user-only so the model cannot re-enable the rules after off', () => {
+  const ctx = fakeCtx()
+  apply(ctx, cfg())
+  const ponytail = ctx.rec.skills.find(s => s.name === 'ponytail')
+  assert.deepEqual(ponytail.invocation, { modelInvocable: false, userInvocable: true })
+  assert.ok(ctx.rec.skills.filter(s => s.name !== 'ponytail').every(s => s.invocation === undefined))
+})
+
 test('a throwing skills.register is logged and the rest still register', () => {
   const ctx = fakeCtx()
   let n = 0
