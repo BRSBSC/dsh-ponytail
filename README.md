@@ -11,21 +11,21 @@
 
 ## 安装
 
-**Web / CLI**（`<owner>` 换成实际托管本仓库的 GitHub 用户名）：
+**Web / CLI**（`BRSBSC` 是本仓库的 GitHub 账号）：
 
 ```sh
-dsh plugin --profile web add github:<owner>/dsh-ponytail
+dsh plugin --profile web add github:BRSBSC/dsh-ponytail
 ```
 
 **桌面版**：先完全退出 DSH Desktop，然后运行：
 
 ```sh
-dsh plugin --profile desktop add github:<owner>/dsh-ponytail
+dsh plugin --profile desktop add github:BRSBSC/dsh-ponytail
 ```
 
 再重新打开 Desktop。`dsh` 命令可以在 Desktop 菜单的"管理 dsh 命令…"里安装。
 
-建议安装时把 commit 写死，例如 `github:<owner>/dsh-ponytail#<sha>`，免得后续推送悄悄改变实际运行的代码。
+建议安装时把 commit 写死，例如 `github:BRSBSC/dsh-ponytail#<sha>`，免得后续推送悄悄改变实际运行的代码。
 
 装好后用 `dsh --profile web --dump-config` 检查，输出里应该有 `# == dsh-ponytail` 这一层。
 
