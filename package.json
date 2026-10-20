@@ -1,6 +1,6 @@
 {
   "name": "dsh-ponytail",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Ponytail lazy-senior-dev ruleset as a native DeepSeek Harness plugin",
   "type": "module",
   "main": "index.js",
