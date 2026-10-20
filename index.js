@@ -58,10 +58,13 @@ export function apply(ctx, config) {
   ctx.inject(['skills'], (inner) => {
     for (const skill of skills) {
       try {
-        // The ponytail rules already ride in the system prompt; a model-loadable copy
-        // would bring them back after /ponytail off.
-        const invocation = skill.name === 'ponytail' ? { invocation: { modelInvocable: false, userInvocable: true } } : {}
-        inner.skills.register({ ...skill, source: 'runtime', ...invocation })
+        // The ponytail rules already ride in the system prompt; every vendored skill
+        // restates them, so a model-loaded copy would bring them back after /ponytail off.
+        inner.skills.register({
+          ...skill,
+          source: 'runtime',
+          invocation: { modelInvocable: false, userInvocable: true },
+        })
       } catch (e) {
         ctx.logger.warn('dsh-ponytail: could not register skill %s: %s', skill.name, e.message)
       }

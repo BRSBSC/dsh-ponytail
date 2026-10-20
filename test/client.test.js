@@ -203,6 +203,29 @@ test('store.setMode writes and notifies; failure returns the message', async () 
   assert.equal(s.getSnapshot().mode, 'ultra')
 })
 
+test('store.load hides instead of throwing when describe returns nothing or rejects', async () => {
+  const empty = mod.createModeStore({ settings: { describe: async () => undefined } }, logger)
+  await empty.load()
+  assert.equal(empty.getSnapshot(), undefined)
+  const broken = mod.createModeStore({ settings: { describe: async () => { throw new Error('offline') } } }, logger)
+  await broken.load()
+  assert.equal(broken.getSnapshot(), undefined)
+})
+
+test('store.setMode returns text for a rejecting or shapeless update', async () => {
+  const withUpdate = update => mod.createModeStore({ settings: { describe: async () => view('full'), update } }, logger)
+  assert.equal(await withUpdate(async () => { throw new Error('offline') }).setMode('ultra'), 'offline')
+  assert.equal(await withUpdate(async () => ({ ok: false })).setMode('ultra'), 'switch failed')
+  assert.equal(await withUpdate(async () => undefined).setMode('ultra'), 'switch failed')
+  assert.equal(await withUpdate(async () => ({ ok: true })).setMode('ultra'), null)
+})
+
+test('a click whose write rejects clears pending instead of leaking a rejection', async () => {
+  const tree = render({ mode: 'full', writable: true }, { setMode: async () => { throw new Error('boom') } })
+  find(tree, e => e.props?.['data-mode'] === 'ultra').props.onClick()
+  await tick()
+})
+
 test('apply registers dictionaries and the dock entry, and reloads on updates and reconnect', async () => {
   const ctx = fakeClientCtx([view('full'), view('lite'), view('ultra')])
   mod.apply(ctx)

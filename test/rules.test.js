@@ -39,5 +39,11 @@ test('buildRules', () => {
   assert.match(buildRules('off', body), /^PONYTAIL MODE OFF — disregard ponytail rules/)
   assert.equal(buildRules('off', undefined), buildRules('off', body))
   assert.ok(buildRules('ultra', body).startsWith('PONYTAIL MODE ACTIVE — level: ultra\n\n'))
-  assert.equal(buildRules('full', undefined), 'PONYTAIL MODE ACTIVE — level: full\n\n' + FALLBACK_RULES)
+  assert.ok(buildRules('full', undefined).startsWith('PONYTAIL MODE ACTIVE — level: full\n\n' + FALLBACK_RULES))
+})
+
+test('the language rule rides on every level, including off', () => {
+  for (const mode of ['lite', 'full', 'ultra', 'off']) {
+    assert.ok(buildRules(mode, body).includes('始终用简体中文回复'), mode)
+  }
 })

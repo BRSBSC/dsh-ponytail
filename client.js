@@ -8,7 +8,7 @@ window.__ModuleLoader__.load({
 
     const MODES = ['lite', 'full', 'ultra', 'off']
     // Profile entry id of the host plugin row; its `mode` field is the level.
-    const SETTINGS_NS = 'ponytail'
+    // The same id names this plugin's locale dictionary.
     const NS = 'ponytail'
 
     const zh = {
@@ -61,8 +61,9 @@ window.__ModuleLoader__.load({
         }
         // A newer load or a write superseded this read.
         if (mine !== generation) return
-        if (!response.ok) return hide(response.error.message)
-        const entry = response.value.namespaces.find(view => view.ns === SETTINGS_NS)
+        // Every field below is host-supplied: a shape change hides the banner, never throws.
+        if (!response?.ok) return hide(response?.error?.message ?? 'settings describe failed')
+        const entry = response.value?.namespaces?.find(view => view.ns === NS)
         const mode = entry?.value?.mode
         if (!MODES.includes(mode)) return hide(entry ? `invalid mode ${JSON.stringify(mode)}` : 'no "ponytail" settings entry')
         set({ mode, writable: response.value.writable })
@@ -71,12 +72,13 @@ window.__ModuleLoader__.load({
         generation++
         let response
         try {
-          response = await remote.settings.update(SETTINGS_NS, { mode }, undefined)
+          response = await remote.settings.update(NS, { mode }, undefined)
         } catch (error) {
           return messageOf(error)
         }
-        if (!response.ok) return response.error.message
-        set({ mode: response.value.value.mode, writable: snapshot?.writable ?? true })
+        // A rejected write must return text: the banner clears `pending` from the result.
+        if (!response?.ok) return response?.error?.message ?? 'switch failed'
+        set({ mode: response.value?.value?.mode ?? mode, writable: snapshot?.writable ?? true })
         return null
       }
       return {
@@ -91,10 +93,17 @@ window.__ModuleLoader__.load({
     }
 
     const h = React.createElement
+    // Same width algorithm the composer card uses, so the banner edges line up with the input box.
+    // Both variables are set by @deepseek-ai/dsh-client-ui-conversation on the conversation body;
+    // they are not a public API, so a rename there shows up as a shifted banner, not an error.
     const rowStyle = {
       display: 'flex',
       alignItems: 'center',
+      boxSizing: 'border-box',
       gap: '8px',
+      width: 'calc(100% - 2 * var(--dsh-composer-side-clearance, 16px))',
+      maxWidth: 'var(--dsh-composer-card-max-width, none)',
+      margin: '0 auto',
       padding: '4px 12px',
       borderBottom: '0.5px solid var(--dsw-alias-border-l1)',
       fontSize: '12px',
@@ -127,10 +136,11 @@ window.__ModuleLoader__.load({
         if (mode === state.mode) return
         setPending(true)
         setError(null)
-        setMode(mode).then((failure) => {
-          setPending(false)
-          setError(failure)
-        })
+        // Both arms clear `pending`: a rejected write must not leave the buttons disabled.
+        setMode(mode).then(
+          (failure) => { setPending(false); setError(failure) },
+          (error) => { setPending(false); setError(messageOf(error)) },
+        )
       }
       return h('div', { role: 'group', 'aria-label': t('level'), style: rowStyle },
         h('span', { style: { fontWeight: 600 } }, 'ponytail'),
@@ -158,7 +168,7 @@ window.__ModuleLoader__.load({
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-ponytail: dictionaries')
       ctx.effect(() => {
         const disposers = [
-          ctx.remote.$on('settings/document-updated', (ns) => { if (ns === SETTINGS_NS) void store.load() }),
+          ctx.remote.$on('settings/document-updated', (ns) => { if (ns === NS) void store.load() }),
           ctx.on('connection/reset', () => { void store.load() }),
         ]
         void store.load()
