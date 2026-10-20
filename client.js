@@ -90,8 +90,56 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function Banner() {
-      return null
+    const h = React.createElement
+    const rowStyle = {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '4px 12px',
+      borderBottom: '0.5px solid var(--dsw-alias-border-l1)',
+      fontSize: '12px',
+    }
+    const buttonStyle = pressed => ({
+      border: 'none',
+      borderRadius: '6px',
+      padding: '2px 8px',
+      cursor: 'pointer',
+      color: 'inherit',
+      font: 'inherit',
+      fontWeight: pressed ? 600 : 400,
+      background: pressed ? 'var(--dsw-alias-fill-l2, rgba(127, 127, 127, 0.16))' : 'transparent',
+    })
+
+    function Banner({ usePonytail, setMode, inputActions, t }) {
+      const [pending, setPending] = React.useState(false)
+      const [error, setError] = React.useState(null)
+      const state = usePonytail(snapshot => snapshot)
+      if (!state) return null
+      const choose = (mode) => {
+        if (mode === state.mode) return
+        setPending(true)
+        setError(null)
+        setMode(mode).then((failure) => {
+          setPending(false)
+          setError(failure)
+        })
+      }
+      return h('div', { role: 'group', 'aria-label': t('level'), style: rowStyle },
+        h('span', { style: { fontWeight: 600 } }, 'ponytail'),
+        ...MODES.map(mode => h('button', {
+          key: mode,
+          type: 'button',
+          'data-mode': mode,
+          'aria-pressed': mode === state.mode,
+          disabled: pending || !state.writable,
+          onClick: () => choose(mode),
+          style: buttonStyle(mode === state.mode),
+        }, t('mode.' + mode))),
+        h('span', { style: { flex: 1 } }),
+        h('button', { type: 'button', 'data-action': 'review', onClick: () => inputActions.setDraft('/ponytail-review '), style: buttonStyle(false) }, t('review')),
+        h('button', { type: 'button', 'data-action': 'audit', onClick: () => inputActions.setDraft('/ponytail-audit '), style: buttonStyle(false) }, t('audit')),
+        error ? h('span', { role: 'alert', style: { color: 'var(--dsw-alias-text-error, #d33)' } }, t('switch.failed', { message: error })) : null,
+      )
     }
 
     const inject = ['remote', 'slots', 'locale']

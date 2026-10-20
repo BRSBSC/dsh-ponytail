@@ -60,6 +60,64 @@ function fakeClientCtx(responses) {
   }
 }
 
+function findAll(node, pred, out = []) {
+  if (node && typeof node === 'object') {
+    if (pred(node)) out.push(node)
+    for (const child of node.children ?? []) findAll(child, pred, out)
+  }
+  return out
+}
+const find = (node, pred) => findAll(node, pred)[0]
+
+function render(snapshot, overrides = {}) {
+  return mod.Banner({
+    usePonytail: select => select(snapshot),
+    setMode: async () => null,
+    inputActions: { setDraft() {} },
+    t: (key, params) => (params ? key + ':' + JSON.stringify(params) : key),
+    ...overrides,
+  })
+}
+
+test('Banner renders nothing without a snapshot', () => {
+  assert.equal(render(undefined), null)
+})
+
+test('Banner shows four levels with the current one pressed and localized labels', () => {
+  const tree = render({ mode: 'ultra', writable: true })
+  const levels = findAll(tree, e => e.props?.['data-mode'])
+  assert.deepEqual(levels.map(e => e.props['data-mode']), ['lite', 'full', 'ultra', 'off'])
+  assert.deepEqual(levels.map(e => e.props['aria-pressed']), [false, false, true, false])
+  assert.deepEqual(levels.map(e => e.children.join('')), ['mode.lite', 'mode.full', 'mode.ultra', 'mode.off'])
+})
+
+test('clicking a level calls setMode; clicking the current one does not', async () => {
+  const calls = []
+  const tree = render({ mode: 'full', writable: true }, { setMode: async (m) => { calls.push(m); return null } })
+  find(tree, e => e.props?.['data-mode'] === 'ultra').props.onClick()
+  find(tree, e => e.props?.['data-mode'] === 'full').props.onClick()
+  await tick()
+  assert.deepEqual(calls, ['ultra'])
+})
+
+test('review and audit fill the composer', () => {
+  const drafts = []
+  const tree = render({ mode: 'full', writable: true }, { inputActions: { setDraft: t => drafts.push(t) } })
+  find(tree, e => e.props?.['data-action'] === 'review').props.onClick()
+  find(tree, e => e.props?.['data-action'] === 'audit').props.onClick()
+  assert.deepEqual(drafts, ['/ponytail-review ', '/ponytail-audit '])
+})
+
+test('read-only profile disables levels but not review/audit', () => {
+  const tree = render({ mode: 'full', writable: false })
+  const levels = findAll(tree, e => e.props?.['data-mode'])
+  const actions = findAll(tree, e => e.props?.['data-action'])
+  assert.equal(levels.length, 4)
+  assert.equal(actions.length, 2)
+  assert.ok(levels.every(e => e.props.disabled === true))
+  assert.ok(actions.every(e => !e.props.disabled))
+})
+
 test('module id and exports', () => {
   assert.equal(loaded.id, 'dsh-ponytail')
   assert.deepEqual(mod.inject, ['remote', 'slots', 'locale'])
