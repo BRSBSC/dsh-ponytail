@@ -3,7 +3,8 @@
 把 [ponytail](https://github.com/DietrichGebert/ponytail)（"懒惰资深开发者"规则集）做成 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的原生插件。DSH 桌面版、Web 和 CLI 都能用。
 
 - 每轮自动把 ponytail 规则注入系统提示词，并按当前档位过滤；
-- `/ponytail lite|full|ultra|off` 切换档位，重启后不丢；
+- `/ponytail lite|full|ultra|off` 切换档位，档位保存在 DSH 设置里；
+- 在 Web 和桌面版的输入框上方显示 ponytail 横幅，文字跟随 DSH 界面语言显示中文或英文；
 - 自带 ponytail 的 6 个 skill，可以输入 `/ponytail-review`、`/ponytail-audit` 等直接调用。
 
 需要 DSH `>=0.2.1-rc.2 <0.3.0`。
@@ -37,13 +38,22 @@ dsh plugin --profile desktop add github:<owner>/dsh-ponytail
 | `/ponytail ultra` | 切到 ultra 档：先质疑需求本身，再动手 |
 | `/ponytail lite` | 切到 lite 档：照需求做，但用一行说明更小的方案 |
 | `/ponytail full` | 默认档 |
-| `/ponytail off` | 关闭，规则不再注入 |
-| `/ponytail` | 当前关闭时按默认档位重新开启；否则显示当前档位 |
+| `/ponytail off` | 关闭。模型会收到一行撤销声明，让它忽略之前的 ponytail 规则 |
+| `/ponytail` | 当前关闭时切回 full；否则显示当前档位 |
 | `/ponytail-review` 等 | 调用对应的 skill |
 
-档位对整个 DSH 进程全局生效，所有会话共用。持久化文件是 `$DSH_HOME/ponytail-mode`，默认在 `~/.dsh/ponytail-mode`。
+档位就是本插件的设置项 `mode`，保存在当前 profile 的 `cordis.patch.yml` 里（例如 `$DSH_HOME/profiles/web/cordis.patch.yml`）。因此 web、desktop、CLI 各自保存自己的档位。
 
-启动时按这个顺序决定档位：持久化文件 → 环境变量 `PONYTAIL_DEFAULT_MODE` → 配置项 `defaultMode`。
+## 横幅
+
+在 Web 和桌面版里，进入会话后，输入框上方会显示一行横幅：
+
+- 四个档位按钮"精简 / 完整 / 极致 / 关闭"，当前档位高亮，点击即切换；
+- "审查"和"全库审计"会把 `/ponytail-review ` 或 `/ponytail-audit ` 填进输入框，补充审查范围后回车发送；
+- 文字跟随 DSH 设置里的界面语言，在中文和英文之间切换；
+- 不管是在别的标签页切换，还是输入 `/ponytail` 命令切换，横幅都会自动更新。
+
+以下情况不显示横幅：新会话的空白页（发出第一条消息之前）、CLI/TUI。profile 只读时，四个档位按钮会禁用。
 
 ## 配置
 
@@ -51,15 +61,27 @@ dsh plugin --profile desktop add github:<owner>/dsh-ponytail
 
 ```yaml
 - id: ponytail
+  name: dsh-ponytail
   config:
-    defaultMode: full     # lite | full | ultra | off
+    mode: full            # lite | full | ultra | off，横幅和 /ponytail 也读写这个字段
     sectionOrder: 10150   # 规则段在系统提示词中的排序值
 ```
+
+如果在 `$DSH_HOME/cordis.patch.yml`（home 级）或 `--patch` overlay 里固定了 `mode`，`/ponytail` 和横幅的切换会被 DSH 拒绝，并显示原因。
 
 ## 已知限制
 
 - 自带完整系统提示词的 preset（声明了 `complete` 段的，例如 `minimal`）会替换掉全部提示词段，ponytail 规则在其中不生效。
-- skill 的优先级：项目里的 `.dsh/skills`、`.agents/skills` 下的同名 skill 会覆盖本插件的；本插件又会覆盖 `~/.dsh/skills`、`~/.agents/skills` 下的同名 skill。
+- skill 优先级：Web 和桌面版里，每个 preset 自己挂载的 skill 来源（包括项目里的 `.dsh/skills`、`.agents/skills`，以及 `~/.dsh/skills`、`~/.agents/skills`）都会覆盖本插件注册的同名 skill。只有在单层组合（例如 TUI）里，本插件才优先于用户目录。
+- 浏览器端 `client.js` 手写成 DSH 内部的模块格式（`window.__ModuleLoader__`），DSH 升级后可能需要跟着调整，所以 `engines.dsh` 限定在 `<0.3.0`。
+- 桌面版的横幅只做了代码层面的推断，没有真机验证。
+
+### 与上游 ponytail 的差异
+
+`skills/` 下的文件是原样复制的，其中一些说法在 DSH 下不成立：
+
+- 说一句 "stop ponytail" 或 "normal mode" 只会影响模型在当前对话里的表现，不会切换档位。切换请用 `/ponytail off` 或横幅。
+- help 卡片里提到的 `~/.config/ponytail/config.json`、环境变量优先级、`/ponytail band`、状态栏等，都是 Claude Code 等宿主的功能，DSH 下没有。档位只看上面"配置"一节的 `mode`。
 
 ## 同步上游 skill
 
