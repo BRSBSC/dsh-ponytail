@@ -53,7 +53,7 @@ test('/ponytail switches, persists, and survives re-apply', () => {
   apply(again, cfg())
   assert.ok(again.rules().includes('level: ultra'))
   assert.deepEqual(ctx.run(' off'), { kind: 'success', text: 'ponytail off' })
-  assert.equal(ctx.rules(), '')
+  assert.match(ctx.rules(), /^PONYTAIL MODE OFF/)
 })
 
 test('bare /ponytail turns on from off, otherwise keeps the level', () => {

@@ -35,7 +35,9 @@ test('filterSkillBodyForMode works on CRLF input', () => {
 })
 
 test('buildRules', () => {
-  assert.equal(buildRules('off', body), '')
+  // Models with in-history prompt updates keep earlier system snapshots, so off must revoke them.
+  assert.match(buildRules('off', body), /^PONYTAIL MODE OFF — disregard ponytail rules/)
+  assert.equal(buildRules('off', undefined), buildRules('off', body))
   assert.ok(buildRules('ultra', body).startsWith('PONYTAIL MODE ACTIVE — level: ultra\n\n'))
   assert.equal(buildRules('full', undefined), 'PONYTAIL MODE ACTIVE — level: full\n\n' + FALLBACK_RULES)
 })
