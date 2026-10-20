@@ -115,6 +115,24 @@ test('review and audit fill the composer', () => {
   assert.deepEqual(drafts, ['/ponytail-review ', '/ponytail-audit '])
 })
 
+test('review keeps a plain-text draft after the command instead of wiping it', () => {
+  const drafts = []
+  const withDraft = draft => ({ inputActions: { setDraft: t => drafts.push(t) }, owner: { input: { draft, occurrences: [] } } })
+  find(render({ mode: 'full', writable: true }, withDraft('src/foo.js')), e => e.props?.['data-action'] === 'review').props.onClick()
+  find(render({ mode: 'full', writable: true }, withDraft('/ponytail-review src/foo.js')), e => e.props?.['data-action'] === 'review').props.onClick()
+  assert.deepEqual(drafts, ['/ponytail-review src/foo.js'])
+})
+
+test('review leaves a draft with reference chips untouched', () => {
+  const drafts = []
+  const tree = render({ mode: 'full', writable: true }, {
+    inputActions: { setDraft: t => drafts.push(t) },
+    owner: { input: { draft: 'look at foo', occurrences: [{ kind: 'file' }] } },
+  })
+  find(tree, e => e.props?.['data-action'] === 'audit').props.onClick()
+  assert.deepEqual(drafts, [])
+})
+
 test('read-only profile disables levels but not review/audit', () => {
   const tree = render({ mode: 'full', writable: false })
   const levels = findAll(tree, e => e.props?.['data-mode'])

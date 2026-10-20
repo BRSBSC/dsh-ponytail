@@ -110,11 +110,19 @@ window.__ModuleLoader__.load({
       background: pressed ? 'var(--dsw-alias-fill-l2, rgba(127, 127, 127, 0.16))' : 'transparent',
     })
 
-    function Banner({ usePonytail, setMode, inputActions, t }) {
+    function Banner({ usePonytail, setMode, inputActions, owner, t }) {
       const [pending, setPending] = React.useState(false)
       const [error, setError] = React.useState(null)
       const state = usePonytail(snapshot => snapshot)
       if (!state) return null
+      // setDraft replaces the whole draft and is not undoable: keep typed text, never drop reference chips.
+      const draftCommand = (command) => {
+        const input = owner?.input
+        if (input?.occurrences?.length) return
+        const draft = input?.draft ?? ''
+        if (draft.startsWith(command.trim())) return
+        inputActions.setDraft(draft.trim() === '' ? command : command + draft)
+      }
       const choose = (mode) => {
         if (mode === state.mode) return
         setPending(true)
@@ -136,8 +144,8 @@ window.__ModuleLoader__.load({
           style: buttonStyle(mode === state.mode),
         }, t('mode.' + mode))),
         h('span', { style: { flex: 1 } }),
-        h('button', { type: 'button', 'data-action': 'review', onClick: () => inputActions.setDraft('/ponytail-review '), style: buttonStyle(false) }, t('review')),
-        h('button', { type: 'button', 'data-action': 'audit', onClick: () => inputActions.setDraft('/ponytail-audit '), style: buttonStyle(false) }, t('audit')),
+        h('button', { type: 'button', 'data-action': 'review', onClick: () => draftCommand('/ponytail-review '), style: buttonStyle(false) }, t('review')),
+        h('button', { type: 'button', 'data-action': 'audit', onClick: () => draftCommand('/ponytail-audit '), style: buttonStyle(false) }, t('audit')),
         error ? h('span', { role: 'alert', style: { color: 'var(--dsw-alias-text-error, #d33)' } }, t('switch.failed', { message: error })) : null,
       )
     }
