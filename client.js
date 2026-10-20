@@ -110,14 +110,14 @@ window.__ModuleLoader__.load({
       background: pressed ? 'var(--dsw-alias-fill-l2, rgba(127, 127, 127, 0.16))' : 'transparent',
     })
 
-    function Banner({ usePonytail, setMode, inputActions, owner, t }) {
+    // `input` is the composer's InputState, spread into the props by the dock's owner.
+    function Banner({ usePonytail, setMode, inputActions, input, t }) {
       const [pending, setPending] = React.useState(false)
       const [error, setError] = React.useState(null)
       const state = usePonytail(snapshot => snapshot)
       if (!state) return null
       // setDraft replaces the whole draft and is not undoable: keep typed text, never drop reference chips.
       const draftCommand = (command) => {
-        const input = owner?.input
         if (input?.occurrences?.length) return
         const draft = input?.draft ?? ''
         if (draft.startsWith(command.trim())) return

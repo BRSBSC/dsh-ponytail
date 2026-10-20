@@ -49,7 +49,7 @@ dsh plugin --profile desktop add github:<owner>/dsh-ponytail
 在 Web 和桌面版里，进入会话后，输入框上方会显示一行横幅：
 
 - 四个档位按钮"精简 / 完整 / 极致 / 关闭"，当前档位高亮，点击即切换；
-- "审查"和"全库审计"会把 `/ponytail-review ` 或 `/ponytail-audit ` 填进输入框，补充审查范围后回车发送；
+- "审查"和"全库审计"会把 `/ponytail-review ` 或 `/ponytail-audit ` 放到输入框开头，已经写好的文字会保留在命令后面，作为审查范围，回车发送；草稿里有文件或会话引用时不会改动草稿，避免丢失引用；
 - 文字跟随 DSH 设置里的界面语言，在中文和英文之间切换；
 - 不管是在别的标签页切换，还是输入 `/ponytail` 命令切换，横幅都会自动更新。
 
