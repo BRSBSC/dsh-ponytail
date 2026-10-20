@@ -142,7 +142,8 @@ window.__ModuleLoader__.load({
       )
     }
 
-    const inject = ['remote', 'slots', 'locale']
+    // Every Remote namespace the plugin touches must be injected, or DSH's service guard throws.
+    const inject = ['remote', 'remote.settings', 'slots', 'locale']
 
     function apply(ctx) {
       const store = createModeStore(ctx.remote, ctx.logger)

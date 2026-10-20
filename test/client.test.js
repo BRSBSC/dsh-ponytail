@@ -40,8 +40,15 @@ function fakeRemote(responses) {
   return remote
 }
 
-function fakeClientCtx(responses) {
-  const remote = fakeRemote(responses)
+function fakeClientCtx(responses, declared = mod.inject) {
+  const raw = fakeRemote(responses)
+  // Mirrors DSH's service guard: a Remote namespace is reachable only when the plugin injects it.
+  const remote = new Proxy(raw, {
+    get: (target, key) => {
+      if (key === 'settings' && !declared.includes('remote.settings')) throw new Error('remote.settings is not declared in inject')
+      return target[key]
+    },
+  })
   const listeners = {}
   const rec = { locale: [], slots: [] }
   return {
@@ -120,7 +127,7 @@ test('read-only profile disables levels but not review/audit', () => {
 
 test('module id and exports', () => {
   assert.equal(loaded.id, 'dsh-ponytail')
-  assert.deepEqual(mod.inject, ['remote', 'slots', 'locale'])
+  assert.deepEqual(mod.inject, ['remote', 'remote.settings', 'slots', 'locale'])
   assert.equal(typeof mod.apply, 'function')
 })
 
