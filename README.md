@@ -23,7 +23,7 @@ dsh plugin --profile web add github:BRSBSC/dsh-ponytail
 dsh plugin --profile desktop add github:BRSBSC/dsh-ponytail
 ```
 
-再重新打开 Desktop。`dsh` 命令可以在 Desktop 菜单的"管理 dsh 命令…"里安装。
+再重新打开 Desktop。这里的 `dsh` 必须是 Desktop 自带的那个：在 Desktop 菜单的"管理 dsh 命令…"里安装，或者直接运行安装目录下的 `resources\runtime\cli\bin\dsh.cmd`。npm 全局安装的 `dsh` 不能管理桌面版的 profile，会报错 `profile "desktop" is managed exclusively by the Electron application`。
 
 建议安装时把 commit 写死，例如 `github:BRSBSC/dsh-ponytail#<sha>`，免得后续推送悄悄改变实际运行的代码。
 
