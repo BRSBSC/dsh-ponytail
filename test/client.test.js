@@ -6,9 +6,11 @@ let loaded
 globalThis.window = { __ModuleLoader__: { load: (def) => { loaded = def } } }
 await import('../client.js')
 
+// Banner's useState calls run in order (pending, error); seed them to render those states.
+let seededStates = []
 const fakeReact = {
   createElement: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat() }),
-  useState: init => [init, () => {}],
+  useState: init => [seededStates.length ? seededStates.shift() : init, () => {}],
 }
 const mod = loaded.factory(name => (name === 'react' ? fakeReact : undefined))
 
@@ -150,7 +152,8 @@ test('module id and exports', () => {
 })
 
 test('zh and en dictionaries share exactly the spec keys', () => {
-  const keys = ['mode.lite', 'mode.full', 'mode.ultra', 'mode.off', 'review', 'audit', 'level', 'switch.failed'].sort()
+  const hints = ['hint.lite', 'hint.full', 'hint.ultra', 'hint.off', 'hint.review', 'hint.audit']
+  const keys = ['mode.lite', 'mode.full', 'mode.ultra', 'mode.off', 'review', 'audit', 'level', 'switch.failed', ...hints].sort()
   assert.deepEqual(Object.keys(mod.zh).sort(), keys)
   assert.deepEqual(Object.keys(mod.en).sort(), keys)
   assert.equal(mod.zh['mode.ultra'], '极致')
@@ -251,4 +254,47 @@ test('apply registers dictionaries and the dock entry, and reloads on updates an
   await tick()
   assert.equal(ctx.remote.describes, 3)
   assert.equal(injected.hooks.ponytail.getSnapshot().mode, 'ultra')
+})
+
+test('levels form one labelled group; review and audit sit outside it', () => {
+  const tree = render({ mode: 'full', writable: true })
+  const group = find(tree, e => e.props?.role === 'group')
+  assert.equal(group.props['aria-label'], 'level')
+  assert.equal(findAll(group, e => e.props?.['data-mode']).length, 4)
+  assert.equal(findAll(group, e => e.props?.['data-action']).length, 0)
+  assert.equal(findAll(tree, e => e.props?.['data-action']).length, 2)
+})
+
+test('every level and command carries a localized hint', () => {
+  const tree = render({ mode: 'full', writable: true })
+  const titled = findAll(tree, e => e.props?.['data-mode'] || e.props?.['data-action'])
+  assert.deepEqual(titled.map(e => e.props.title),
+    ['hint.lite', 'hint.full', 'hint.ultra', 'hint.off', 'hint.review', 'hint.audit'])
+})
+
+test('the label dims only when ponytail is off', () => {
+  const name = mode => find(render({ mode, writable: true }), e => e.props?.className === 'dsh-ponytail-name')
+  assert.equal(name('off').props['data-off'], true)
+  for (const mode of ['lite', 'full', 'ultra']) assert.equal(name(mode).props['data-off'], undefined)
+})
+
+test('a pending switch marks the group busy; a failure gets a line of its own', () => {
+  seededStates = [true, 'pinned']
+  const tree = render({ mode: 'full', writable: true })
+  assert.equal(find(tree, e => e.props?.role === 'group').props['aria-busy'], true)
+  assert.ok(findAll(tree, e => e.props?.['data-mode']).every(e => e.props.disabled === true))
+  const alert = find(tree, e => e.props?.role === 'alert')
+  assert.equal(alert.props.className, 'dsh-ponytail-error')
+  assert.equal(alert.children.join(''), 'switch.failed:{"message":"pinned"}')
+})
+
+test('styles use only tokens the DSH theme defines, wrap on narrow widths, and keep 24px targets', () => {
+  const css = find(render({ mode: 'full', writable: true }), e => e.type === 'style').children.join('')
+  // Neither name exists in @deepseek-ai/dsh-client-ui-theme; the banner used to render their fallbacks.
+  assert.ok(!css.includes('--dsw-alias-fill-l2') && !css.includes('--dsw-alias-text-error'))
+  assert.match(css, /--dsw-alias-interactive-bg-active/)
+  assert.match(css, /--dsw-alias-state-error-primary/)
+  assert.match(css, /\.dsh-ponytail\{[^}]*flex-wrap:wrap/)
+  assert.match(css, /\.dsh-ponytail button\{[^}]*min-height:24px/)
+  assert.match(css, /\.dsh-ponytail-error\{flex-basis:100%/)
 })

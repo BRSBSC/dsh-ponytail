@@ -20,6 +20,12 @@ window.__ModuleLoader__.load({
       audit: '全库审计',
       level: '档位',
       'switch.failed': '切换失败：{message}',
+      'hint.lite': '照需求做；有更小的方案就先说一句',
+      'hint.full': '默认：最小完整改动，结尾交代跳过了什么',
+      'hint.ultra': '动手前点名理由不足的需求，仍然照做',
+      'hint.off': '不注入 ponytail 规则',
+      'hint.review': '在输入框开头放入 /ponytail-review',
+      'hint.audit': '在输入框开头放入 /ponytail-audit',
     }
 
     const en = {
@@ -31,6 +37,12 @@ window.__ModuleLoader__.load({
       audit: 'Audit',
       level: 'Level',
       'switch.failed': 'Switch failed: {message}',
+      'hint.lite': 'Builds what you ask; names a smaller option first when there is one',
+      'hint.full': 'Default: the smallest complete change, ending with what was skipped',
+      'hint.ultra': "Names the parts the need doesn't justify, then builds them anyway",
+      'hint.off': 'Ponytail rules off',
+      'hint.review': 'Puts /ponytail-review at the start of the composer',
+      'hint.audit': 'Puts /ponytail-audit at the start of the composer',
     }
 
     const messageOf = error => (error instanceof Error ? error.message : String(error))
@@ -93,31 +105,29 @@ window.__ModuleLoader__.load({
     }
 
     const h = React.createElement
-    // Same width algorithm the composer card uses, so the banner edges line up with the input box.
-    // Both variables are set by @deepseek-ai/dsh-client-ui-conversation on the conversation body;
+    // A stylesheet rather than inline styles: hover and keyboard focus have no inline form.
+    // Colors and radii are DSH theme tokens (@deepseek-ai/dsh-client-ui-theme), so both themes follow.
+    // The row width is the composer card's own algorithm, so the banner edges line up with the input box.
+    // Both width variables are set by @deepseek-ai/dsh-client-ui-conversation on the conversation body;
     // they are not a public API, so a rename there shows up as a shifted banner, not an error.
-    const rowStyle = {
-      display: 'flex',
-      alignItems: 'center',
-      boxSizing: 'border-box',
-      gap: '8px',
-      width: 'calc(100% - 2 * var(--dsh-composer-side-clearance, 16px))',
-      maxWidth: 'var(--dsh-composer-card-max-width, none)',
-      margin: '0 auto',
-      padding: '4px 12px',
-      borderBottom: '0.5px solid var(--dsw-alias-border-l1)',
-      fontSize: '12px',
-    }
-    const buttonStyle = pressed => ({
-      border: 'none',
-      borderRadius: '6px',
-      padding: '2px 8px',
-      cursor: 'pointer',
-      color: 'inherit',
-      font: 'inherit',
-      fontWeight: pressed ? 600 : 400,
-      background: pressed ? 'var(--dsw-alias-fill-l2, rgba(127, 127, 127, 0.16))' : 'transparent',
-    })
+    const CSS = `
+.dsh-ponytail{display:flex;flex-wrap:wrap;align-items:center;box-sizing:border-box;gap:8px;
+  width:calc(100% - 2 * var(--dsh-composer-side-clearance, 16px));max-width:var(--dsh-composer-card-max-width, none);
+  margin:0 auto;padding:4px 12px;border-bottom:0.5px solid var(--dsw-alias-border-l1);font-size:12px}
+.dsh-ponytail-name{font-weight:500;color:var(--dsw-alias-label-secondary)}
+.dsh-ponytail-name[data-off]{color:var(--dsw-alias-label-tertiary)}
+.dsh-ponytail-levels{display:inline-flex;gap:2px;padding:2px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm, 8px)}
+.dsh-ponytail-levels[aria-busy=true]{opacity:.6}
+.dsh-ponytail button{display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border:none;
+  border-radius:calc(var(--dsw-radius-sm, 8px) - 2px);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer}
+.dsh-ponytail button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
+.dsh-ponytail button[aria-pressed=true]{background:var(--dsw-alias-interactive-bg-active, rgba(127, 127, 127, 0.16));color:var(--dsw-alias-label-primary);font-weight:500}
+.dsh-ponytail button:disabled{cursor:default}
+.dsh-ponytail button:disabled:not([aria-pressed=true]){color:var(--dsw-alias-label-tertiary)}
+.dsh-ponytail button:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:1px}
+.dsh-ponytail-sep{width:0.5px;height:14px;background:var(--dsw-alias-border-l2)}
+.dsh-ponytail-error{flex-basis:100%;color:var(--dsw-alias-state-error-primary, #d33)}
+`
 
     // `input` is the composer's InputState, spread into the props by the dock's owner.
     function Banner({ usePonytail, setMode, inputActions, input, t }) {
@@ -142,21 +152,25 @@ window.__ModuleLoader__.load({
           (error) => { setPending(false); setError(messageOf(error)) },
         )
       }
-      return h('div', { role: 'group', 'aria-label': t('level'), style: rowStyle },
-        h('span', { style: { fontWeight: 600 } }, 'ponytail'),
-        ...MODES.map(mode => h('button', {
-          key: mode,
-          type: 'button',
-          'data-mode': mode,
-          'aria-pressed': mode === state.mode,
-          disabled: pending || !state.writable,
-          onClick: () => choose(mode),
-          style: buttonStyle(mode === state.mode),
-        }, t('mode.' + mode))),
+      // The group holds only the levels; review and audit are commands, so they sit outside it.
+      return h('div', { className: 'dsh-ponytail' },
+        h('style', null, CSS),
+        h('span', { className: 'dsh-ponytail-name', 'data-off': state.mode === 'off' || undefined }, 'ponytail'),
+        h('span', { className: 'dsh-ponytail-levels', role: 'group', 'aria-label': t('level'), 'aria-busy': pending },
+          ...MODES.map(mode => h('button', {
+            key: mode,
+            type: 'button',
+            'data-mode': mode,
+            'aria-pressed': mode === state.mode,
+            title: t('hint.' + mode),
+            disabled: pending || !state.writable,
+            onClick: () => choose(mode),
+          }, t('mode.' + mode)))),
         h('span', { style: { flex: 1 } }),
-        h('button', { type: 'button', 'data-action': 'review', onClick: () => draftCommand('/ponytail-review '), style: buttonStyle(false) }, t('review')),
-        h('button', { type: 'button', 'data-action': 'audit', onClick: () => draftCommand('/ponytail-audit '), style: buttonStyle(false) }, t('audit')),
-        error ? h('span', { role: 'alert', style: { color: 'var(--dsw-alias-text-error, #d33)' } }, t('switch.failed', { message: error })) : null,
+        h('button', { type: 'button', 'data-action': 'review', title: t('hint.review'), onClick: () => draftCommand('/ponytail-review ') }, t('review')),
+        h('span', { className: 'dsh-ponytail-sep', 'aria-hidden': true }),
+        h('button', { type: 'button', 'data-action': 'audit', title: t('hint.audit'), onClick: () => draftCommand('/ponytail-audit ') }, t('audit')),
+        error ? h('span', { role: 'alert', className: 'dsh-ponytail-error' }, t('switch.failed', { message: error })) : null,
       )
     }
 
