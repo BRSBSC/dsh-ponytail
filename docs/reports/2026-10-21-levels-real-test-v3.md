@@ -1,0 +1,247 @@
+# dsh-ponytail 四档复测报告 v3（headless，每档 3 次，盲评）
+
+测试时间：2026-10-21 09:08–10:34（Asia/Shanghai）
+测试对象：`dsh-ponytail` 1.0.1（从本 worktree 安装，与 main 一致）
+宿主：DSH CLI `0.2.1-rc.2`，临时 profile `ponybench`（headless 模板 + 重新启用凭据存储，复用桌面版的 aiproxy key）
+模型：`deepseek-v4.1-flash`（aiproxy，reasoningEffort: max），全部 24 次固定同一模型
+原始数据：`test-runs/v3-headless/`（脚本、每次运行的事件流和产物、盲评记录、对照表）
+
+> 前两份报告（`2026-10-21-levels-real-test.md`、`-v2.md`）每档只跑 1 次，测试提示词里还有"不许反问""直接给可运行代码"这类会压掉档位专属规则的约束。本轮针对这些偏差重新设计。
+
+---
+
+## 一、结论
+
+1. **开和关的差别非常稳定**。两个任务、24 次运行，开启档位的产物全部比 off 小，区间完全不重叠：T1 off 最少 1037 行，开启档最多 258 行；T2 off 最少 4540 行，开启档最多 1421 行。
+2. **lite / full / ultra 之间：模糊需求下分不出来；堆需求下 ultra 明显最紧凑**。T2 中位数：ultra 625 行，full 1121 行，lite 1305 行；超出需求的功能 ultra 0/3，full 1/3，lite 2/3。每档只有 3 次，方向一致，但还不能算统计结论。
+3. **ultra 的"质疑需求"0/6 次执行，原因已经从模型自己的思考里确认：规则互相冲突**。T2 的 3 次 ultra 运行在思考里都读到了 ultra 那一行，也都引用了 `Never cut: … anything the user asked for`，最后都判定"用户明确要了，就得全做"。去掉"不许反问"以后照样不执行，所以 v2 里的这个约束不是主因。
+4. **lite 的"提更小方案"只在短任务里执行**。T1 2/3 次提了，T2 0/3。T2 的 lite 运行在第一步思考里还记得这条规则，但跑了 40–114 步之后，最终回复里没有提。
+5. **v2 有三条结论没有复现**："lite 最省"（这次 T2 里 lite 反而是开启档里最大的）、"lite 不写测试"（这次 lite 6/6 都写了）、"`shortcut:` 注释完全没落地"（这次开启档有 4/18 次用了这个格式，off 0/6）。
+6. **结尾汇报跳过项不算插件效果**：off 档也有 5/6 次写了。这个模型默认就会写，所以 v1 用"off 没有跳过项"来证明插件起效，站不住。
+
+---
+
+## 二、怎么测的
+
+### 2.1 针对前两轮偏差的改动
+
+| 前两轮的偏差 | 本轮做法 |
+|---|---|
+| 需求写死，模型没有可砍的空间 | 两个任务：**T1 模糊需求**"用 Node.js 写一个把 Markdown 转成 HTML 的命令行工具。"；**T2 堆需求**，沿用 v2 的原题 |
+| 提示词里有"不许反问"或"直接给代码" | 提示词只有任务本身，不加任何约束，也不强制要求汇报格式 |
+| 模型反问之后没有下文 | 如果第 1 轮没写出代码，就在同一会话里统一回复"你来定，按你的判断直接做完。"（结果 0/24 次触发） |
+| 每档只跑 1 次 | 每档每个任务跑 3 次，共 24 次 |
+| 测试者自己评 | 行数、文件数、测试、`shortcut:`、依赖、token 全部由脚本统计；需要人判断的指标先打乱标签盲评，判完写入 `judgments.json` 后才打开对照表 |
+| 中途切换档位要改配置文件 | 每档一个 `--patch` overlay（`mode: <档位>`），profile 文件本身不改 |
+
+### 2.2 注入核对
+
+冒烟测试中，lite 档的模型逐字回报了 `PONYTAIL MODE ACTIVE — level: lite` 和 lite 那一行表格，与 `buildRules()` 的输出一致。
+
+每一步的输入大约 14.4 万 token，其中绝大部分是工具定义：会话日志里的 `request/header` 显示有 198 个工具、45.8 万字符，REA MCP 带进来的工具应该占了不少。渲染出来的系统提示正文只有 6513 字符，ponytail 规则从第 3186 个字符开始，约占一半。档位专属的只有其中一行。
+
+### 2.3 盲评口径
+
+| 指标 | 记 1 的条件 |
+|---|---|
+| S 提更小方案 | 明确给出一个比交付物更小的选项，例如"不要 stdin 可以再删 8 行"或"换现成库更省事"。"要严格兼容 CommonMark 就换 markdown-it"这类升级建议不算 |
+| P 质疑需求 | 对需求中的某一项提出质疑或建议不做。只说"我会砍到最小"、但没有点名任何一项的，记为"弱" |
+| E 结尾汇报 | 结尾写了跳过了什么、没检查什么、有什么风险 |
+| X 超发功能 | 有两个以上明显没人要的功能 |
+
+盲评时把文本里的 `level: xxx` 都替换掉了。只有一份回复（T1-lite-1）在正文里自己写了"我按 lite 模式只提不做"，这一份等于没有盲。
+
+---
+
+## 三、数据
+
+### 3.1 规模（脚本统计，排除 `node_modules/`、`out/`、`dist/`；行数为 `.js/.mjs/.cjs/.ts` 的非空行）
+
+格式为：中位数 [最小–最大]，每格 n=3。
+
+| 任务 | 档位 | 代码行 | 代码文件 | 全部文件 | 步数 | 耗时（分钟） | 有测试 | 有 `shortcut:` | 用了依赖 |
+|---|---|---|---|---|---|---|---|---|---|
+| T1 | off | 1305 [1037–1744] | 5 [4–8] | 10 [8–11] | 56 [52–65] | 8.2 [7.6–14.2] | 3/3 | 0/3 | 1/3 |
+| T1 | lite | 111 [80–218] | 2 [2–3] | 5 [4–5] | 15 [9–19] | 2.3 [1.3–4] | 3/3 | 0/3 | 2/3 |
+| T1 | full | 240 [42–258] | 2 [1–2] | 3 [2–3] | 8 [6–14] | 1.3 [1.2–2.2] | 2/3 | 0/3 | 1/3 |
+| T1 | ultra | 120 [73–222] | 2 [1–3] | 3 [3–4] | 8 [5–11] | 1.7 [1–2.1] | 2/3 | 1/3 | 0/3 |
+| T2 | off | 6476 [4540–6712] | 28 [25–34] | 50 [40–57] | 193 [129–258] | 31.9 [22–40] | 3/3 | 0/3 | 0/3 |
+| T2 | lite | 1305 [899–1421] | 15 [11–17] | 26 [18–28] | 53 [40–114] | 7 [5.6–14.9] | 3/3 | 1/3 | 0/3 |
+| T2 | full | 1121 [609–1300] | 12 [11–13] | 23 [20–25] | 40 [31–83] | 7.8 [5.3–11] | 3/3 | 1/3 | 1/3 |
+| T2 | ultra | 625 [547–625] | 10 [9–11] | 18 [11–19] | 45 [39–67] | 11.3 [5.3–12.2] | 3/3 | 1/3 | 2/3 |
+
+- 所用依赖都是 `marked`，另有一次 ultra 加了 `chokidar`。按规则第 4 条，Markdown 解析器不是"几行代码"的事，用 `marked` 正是规则期望的做法。T1-full-2 用了它，只写了 42 行，是 24 次里最符合 ponytail 的一份。
+- T2-off-1 跑了两次：第一次在第 122 步被自己的命令杀掉（见第五节），重跑那次在 40 分钟上限处被截停。表里用的是重跑那次的数据，它的行数是下限。
+
+### 3.2 行为（盲评后揭开标签，每档 6 次 = 2 个任务 × 3 次）
+
+| 档位 | S 提更小方案 | P 质疑需求 | E 结尾汇报 | X 超发功能 | 动手前反问 |
+|---|---|---|---|---|---|
+| off | 1/6 | 0/6 | 5/6 | **5/6** | 0/6 |
+| lite | **2/6**（T1 2/3，T2 0/3） | 0/6 | 6/6 | 2/6 | 0/6 |
+| full | 0/6 | 0/6 | 6/6 | 1/6 | 0/6 |
+| ultra | 0/6 | **0/6**（另有 1 次"弱"） | 6/6 | **0/6** | 0/6 |
+
+### 3.3 模型自己怎么处理档位规则（摘自前三步的思考）
+
+| 运行 | 思考里的原话（节选） | 最终 |
+|---|---|---|
+| T2-ultra-1 | "用户一次要求了 5 个功能，其中很多可能是过度设计。但用户明确要求了这些功能——ponytail 说 Never cut … anything the user asked for。" 还计划了"在最终回复中简短质疑" | 全部实现，最终回复里没有质疑 |
+| T2-ultra-2 | "Hmm, there's tension. The user explicitly asked for all these features. Ponytail says never cut …" | 全部实现 |
+| T2-ultra-3 | "the user explicitly asked for all of them, so I must build them" | 全部实现 |
+| T1-ultra-3 | "question the request — but the request is clear and reasonable" | 直接做了最小版本 |
+| T2-lite-2 | "Ponytail lite：应该在一行里提到更小的选项" | 跑了 53 步之后，最终回复里没提 |
+
+### 3.4 消耗
+
+24 次合计：未命中缓存的输入 5.70M、缓存读取 276.5M、输出 1.31M token，运行时间累计 221 分钟（4 个并行）。其中 off 一档就占了 177.4M 缓存读取，约 64%。
+
+---
+
+## 四、逐条复核前两份报告
+
+| 前两份报告的结论 | 出处 | 本轮结果 | 判定 |
+|---|---|---|---|
+| 插件生效，off 与开启档差别巨大 | v1、v2 | 24/24 次，区间完全不重叠 | **成立** |
+| lite / full / ultra 三档行为无差别 | v1 | T1 分不出来；T2 中 ultra 明显更小、超发 0/3 | **部分成立** |
+| lite 是最省的一档 | v2 | T1 与 ultra 持平；T2 中 lite 是开启档里最大的 | **不成立**，是单次运行的波动 |
+| lite 不写测试 | v2 | lite 6/6 都有测试 | **不成立** |
+| `shortcut:` 注释格式 0/4，完全没落地 | v2 | 开启档 4/18 次用了，off 0/6 | **不成立**：执行率低，但不是零，而且只在开启时出现 |
+| ultra 不 push back，原因是缺少触发条件 | v1、v2 | 0/6；思考里明确说是被 `Never cut` 挡住了 | **现象成立，原因找错了** |
+| lite 不提更小方案 | v1、v2 | T1 2/3，T2 0/3 | **部分成立**：长任务里会丢掉 |
+| off 不写结尾跳过项，说明是插件效果 | v1 | off 5/6 也写了 | **不成立**：这个模型默认就会写 |
+| 横幅在真机验证通过 | v2 | 本轮没测横幅 | 未复核（v2 实际测的是 web profile 加无头 Chromium，不是桌面版） |
+
+---
+
+## 五、意外：off 档的模型杀掉了本机所有 node 进程
+
+T2-off-1 第一次运行到第 122 步、正在测试 watch 模式时，模型执行了：
+
+```powershell
+Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+```
+
+本意是关掉它自己起的 watch 子进程，实际却把它自己（dsh）、跑测脚本，以及用户桌面版的 REA MCP 一起杀了。桌面版在 09:31:12 自动拉起了 REA。之后的运行加了自动恢复：被杀的现场留档到 `runs-killed-*`，然后重跑。
+
+这件事和 ponytail 没有直接关系：发生在 off 档，而且只有 1 次，不能归因到档位。它说明的是 headless 模式下模型用 shell 测试长驻进程时的真实风险。
+
+---
+
+## 六、建议
+
+### 6.1 改 `skills/ponytail/SKILL.md` 的两行档位规则（只改文本，不动代码）
+
+> 已按下面的文本修改，help 卡片和 README 也已同步。A/B 验证结果见第十节：规则冲突已经解决，但两档的执行率仍然很低。
+
+**ultra**：把"质疑"和"砍掉"分开，就不会再和 `Never cut: anything the user asked for` 冲突。质疑是说出来，砍不砍由用户定：
+
+```
+| **ultra** | Also question the request: before building, name in one line each requested part the need does not justify and what dropping it would save. Still build all of it unless the user drops it. |
+```
+
+**lite**：把"提更小方案"挂到结尾汇报上。结尾汇报这次 18/18 都执行了，挂在它后面，长任务里就不容易丢：
+
+```
+| **lite** | Build what was asked. In your closing lines, also name the smaller option and what it would save. |
+```
+
+### 6.2 下一轮只做 A/B 小样本
+
+- 只跑 **T2 × {lite, ultra} × 3 次，共 6 次**，对比改前和改后。off 和 full 沿用本轮数据。开启档的成本低，本轮 18 次开启档合计才 99M 缓存读取。
+- **运行目录改成随机名**。本轮的目录名 `runs/T2-ultra-2/work` 暴露了"这是测试"，T2-ultra-2 的思考里写了 "Probably evaluating whether I follow ponytail ultra"。四档都受同样的影响，横向比较仍然成立，但下一轮应该消除。
+
+### 6.3 README 的两处说法（来自 v2 的发现，本轮没有涉及）
+
+- 第 56 行"新会话空白页不显示横幅"：v2 实测是显示的。
+- 第 77 行"桌面版横幅没有真机验证"：v2 测的是 web profile，这句话严格来说仍然成立。
+
+---
+
+## 七、局限
+
+- 每格只有 n=3，单模型、两个任务。完全分开的两组 n=3，双侧 Mann-Whitney 检验的最小 p 值也只有 0.1。所以 off 与开启档的差别靠的是两个任务、六组对比的一致性，三档之间的排序只能算方向。
+- 盲评只有一个评判者（就是测试者本人），只有标签是盲的；T1-lite-1 的正文自己写了档位。
+- headless 没有真人可以回答问题，24 次里没有一次反问，"你来定"那句回复一次都没用上。模型在 headless 下天然倾向于直接执行，这对 lite 的 "let the user pick" 不利。
+- 用户全局配置里的 REA MCP 对所有档位都生效，作为常量保留。
+- T2-off-1 被截停，它的行数是下限，不影响"off 远大于开启档"这个结论。
+
+---
+
+## 八、复现
+
+```bash
+# 1. 建临时 profile（headless 模板），装本地插件
+dsh --profile ponybench --from-default-profile headless --help
+dsh plugin --profile ponybench add "file:<本仓库路径>"
+# 2. 模型配置：provider、模型，以及重新启用凭据存储（headless 模板默认关掉了它）。文件里只有 key 的引用名，没有 key 本身
+cp test-runs/v3-headless/ponybench.cordis.patch.yml ~/.dsh/profiles/ponybench/cordis.patch.yml
+# 3. 在 test-runs/v3-headless 目录里跑测试、统计、盲评
+node run.mjs 1,2,3 T1,T2
+node measure.mjs
+node blind.mjs
+```
+
+---
+
+## 九、本轮对系统做的改动
+
+| 改动 | 状态 |
+|---|---|
+| 新建 `~/.dsh/profiles/ponybench`（临时 profile） | 已删除，`profiles/` 下只剩 `desktop`、`web`、`node_modules` |
+| `~/.dsh/sessions/` 下新增的 26 个 headless 会话目录（24 次运行加 2 次冒烟测试，目录名含 `scratchpad-bench`） | 已删除，其余 20 个会话目录没有动 |
+| `test-runs/v3-headless/`（8.5MB，不含 `node_modules`） | 保留，作为本报告的原始数据 |
+| desktop profile、全局 `cordis.patch.yml`、凭据文件 | 未改动 |
+| 09:31 被模型杀掉的桌面版 REA MCP | 桌面版已自动重启 |
+| A/B 重新建的 `ponybench` profile，以及 7 个 headless 会话目录（`~/.dsh/sessions/` 下，目录名形如 `--C-Users-19952-AppData-Local-Temp-<6 位 hex>--`） | **还在**，留给下一轮 A/B，用完再删 |
+
+---
+
+## 十、A/B：改后的规则（T2 × lite/ultra × 3，2026-10-21 11:46–12:14）
+
+改动：第 6.1 节的两行新规则。另外，工作目录从 `…/bench/runs/T2-ultra-2/work` 换成了 `%TEMP%\<6 位随机 hex>`，路径里不再出现档位名和"测试"字样。其余条件和 v3 一致：同一模型、同一任务文本、同一套统计脚本和盲评口径。原始数据在 `test-runs/v3-headless/ab/`。
+
+T2-ultra-1 第一次运行时，第 2 步的输出撞上了 32768 token 的单步上限（`reason: max-tokens`），回复为空。这和档位无关，现场留档在 `runs-failed-T2-ultra-1-maxtokens`，表里用的是补跑那次。
+
+### 10.1 对比
+
+| T2 | v3（旧规则） | A/B（新规则） |
+|---|---|---|
+| lite 代码行 | 1421 / 1305 / 899（中位 1305） | 622 / 989 / 923（中位 923） |
+| lite 结尾提更小方案（S） | 0/3 | **0/3** |
+| lite 超发功能（X） | 2/3 | 2/3 |
+| ultra 代码行 | 547 / 625 / 625（中位 625） | 1150 / 731 / 856（中位 856） |
+| ultra 动手前点名理由不足的需求（P） | 0/3（另有 1 次"弱"） | **1/3** |
+| ultra 超发功能（X） | 0/3 | 1/3 |
+| ultra 思考里用 `Never cut` 否决质疑 | 3 次 | **0 次** |
+| 第一步思考里准确复述了本档规则 | lite 3/3，ultra 3/3 | lite 3/3，ultra 3/3 |
+
+6 次合计消耗：未命中缓存的输入 1.40M、缓存读取 70.4M、输出 0.37M token。
+
+### 10.2 结论
+
+1. **规则冲突解决了**。新规则下，ultra 的思考里一次都没有再拿 `Never cut` 来否决质疑，3 次都把规则复述成"点名哪些不值得、能省什么，但仍然全做"。唯一执行成功的 T2-ultra-2，表现正是规则想要的：先说"这些需求里不划算的部分（仍会做）：多语言界面在单人 CLI 里几乎用不上……watch + 增量缓存对单文件构建是纯开销"，然后全部照做。
+2. **剩下的问题是时机：规则记住了，到后来没说出来**。5 次没有执行的运行，第一步都准确复述了规则，并且计划之后再说：
+   - T2-ultra-3 已经拟好了要说的话（"多语言界面……去掉省 ~20 行和一个 flag"），计划放在结尾，跑了 51 步之后没说；
+   - 3 次 lite 都在思考里写了 "name the smaller option in closing" 或"放到结尾里说明"，跑了 78–120 步之后都没说。
+
+   v3 第 6.1 节的假设是"挂到结尾汇报上就不会丢"，**这个假设被推翻了**：结尾汇报本身 6/6 都写了，但挂在它后面的那一句没有跟着出现。唯一成功的那次，是在写第一行代码之前说的。
+3. **规模变化不能归因**。新规则下 lite 变小、ultra 变大，但每格 n=3，工作目录也同时换了，而且 v3 本身同档两次运行之间就能差出一倍。
+
+### 10.3 下一步建议
+
+把两档的专属动作都挪到"第一次调用工具之前"。这是唯一一次成功运行的做法，而且这个时间点在长任务开始之前，不会被后面几十步冲掉：
+
+```
+| **lite** | Build what was asked. Before your first tool call, name the smaller option in one line and what it would save. |
+| **ultra** | Also question the request: before your first tool call, name in one line each requested part the need does not justify and what dropping it would save. Still build all of it unless the user drops it. |
+```
+
+改完再跑同样的 6 次 A/B（约 70M 缓存读取）。这一轮的工作目录已经是中性名，下一轮和本轮之间只差规则文本这一个变量。
+
+> 已采纳，措辞定为 "Before any tool call or code"，这样纯聊天、不调工具的回答也覆盖到了。规则仍然只写在系统提示里：DSH 插件插不进会话中途的系统消息，而本轮 6/6 次都在第一步准确复述了档位规则，说明系统提示里那一行模型读到了。第二轮 A/B 的结果待补。
+
+### 10.4 局限
+
+- 每格 n=3。新规则和中性目录名是同时改的，所以 ultra 从 0/3 到 1/3 这一步，严格来说分不清是哪一项起的作用。不过从思考过程看，旧规则下挡住质疑的是 `Never cut`，不是路径。
+- 盲评仍然只有一个评判者。T2-ultra-2 的正文里自己写了"按 ultra 级别"，这一份等于没有盲。
