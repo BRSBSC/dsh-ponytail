@@ -19,7 +19,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test \"test/*.test.js\""
   },
   "engines": {
     "dsh": ">=0.2.1-rc.2 <0.3.0"
