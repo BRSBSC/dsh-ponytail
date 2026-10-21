@@ -5,11 +5,12 @@ import { Config, apply } from '../index.js'
 // Services and records stay apart: in DSH `ctx.skills` is the service itself.
 // `ctx.config` mimics the volatile reference DSH passes; a settings write commits into it.
 function fakeCtx({ commands = true, skills = true, settings = true, mode = 'full' } = {}) {
-  const rec = { sections: [], commands: [], skills: [], warnings: [], updates: [] }
+  const rec = { sections: [], commands: [], skills: [], warnings: [], updates: [], listeners: {} }
   const ctx = {
     rec,
     state: { mode },
     systemPrompt: { section: (s) => { rec.sections.push(s); return () => {} } },
+    on: (event, fn) => { rec.listeners[event] = fn },
     logger: { warn: (...a) => rec.warnings.push(a) },
     inject: (names, fn) => { if (names.every(n => ctx[n])) fn(ctx) },
     get: name => ctx[name],
@@ -121,4 +122,52 @@ test('loads without commands and skills services', () => {
   const ctx = fakeCtx({ commands: false, skills: false })
   assert.doesNotThrow(() => apply(ctx, ctx.config))
   assert.ok(ctx.rules().includes('level: full'))
+})
+
+// Runs the pre-step listener for one proposed step; the last assistant message is step 1's reply.
+function preStep(ctx, { step = 2, content, decision, derive } = {}) {
+  const agent = { session: { deriveMessages: derive ?? (() => [{ role: 'user', content: [] }, { role: 'assistant', content }]) } }
+  return ctx.rec.listeners['agent/pre-step']({ agent, step }, async () => decision)
+}
+const TOOL_ONLY = [{ type: 'thinking', text: 'plan' }, { type: 'text', text: '  ' }, { type: 'tool-call', id: 'c1', name: 'pwsh', arguments: '{}' }]
+
+test('lite and ultra: a first step that opened with a tool call gets one reminder on step 2', async () => {
+  for (const mode of ['lite', 'ultra']) {
+    const ctx = fakeCtx({ mode })
+    apply(ctx, ctx.config)
+    const steering = { id: 's1', role: 'user', content: [], source: { kind: 'user' } }
+    const out = await preStep(ctx, { content: TOOL_ONLY, decision: { kind: 'enter', messages: [steering] } })
+    assert.equal(out.messages.length, 2)
+    assert.equal(out.messages[0], steering)
+    const reminder = out.messages[1]
+    assert.equal(reminder.role, 'user')
+    assert.deepEqual(reminder.source, { kind: 'dsh-ponytail' })
+    assert.match(reminder.content[0].text, new RegExp('level: ' + mode))
+    assert.ok(Object.isFrozen(reminder) && Object.isFrozen(reminder.content[0]))
+  }
+})
+
+test('no reminder when step 1 spoke, on other steps or levels, or when the step is rejected', async () => {
+  const enter = { kind: 'enter', messages: [] }
+  const lite = fakeCtx({ mode: 'lite' })
+  apply(lite, lite.config)
+  assert.equal(await preStep(lite, { content: [{ type: 'text', text: '更小的方案：…' }, ...TOOL_ONLY], decision: enter }), enter)
+  // A text-only reply closes the turn; adding a message there would reopen it with an extra request.
+  assert.equal(await preStep(lite, { content: [{ type: 'text', text: '完成' }], decision: enter }), enter)
+  assert.equal(await preStep(lite, { step: 1, content: TOOL_ONLY, decision: enter }), enter)
+  assert.equal(await preStep(lite, { step: 3, content: TOOL_ONLY, decision: enter }), enter)
+  const reject = { kind: 'reject' }
+  assert.equal(await preStep(lite, { content: TOOL_ONLY, decision: reject }), reject)
+  for (const mode of ['full', 'off']) {
+    const ctx = fakeCtx({ mode })
+    apply(ctx, ctx.config)
+    assert.equal(await preStep(ctx, { content: TOOL_ONLY, decision: enter }), enter)
+  }
+})
+
+test('a session that cannot be read never breaks the step', async () => {
+  const ctx = fakeCtx({ mode: 'ultra' })
+  apply(ctx, ctx.config)
+  const enter = { kind: 'enter', messages: [] }
+  assert.equal(await preStep(ctx, { decision: enter, derive: () => { throw new Error('gone') } }), enter)
 })

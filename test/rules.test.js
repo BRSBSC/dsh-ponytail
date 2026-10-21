@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { parseSkillFile } from '../lib/skills.js'
-import { FALLBACK_RULES, buildRules, filterSkillBodyForMode } from '../lib/rules.js'
+import { FALLBACK_RULES, buildReminder, buildRules, filterSkillBodyForMode } from '../lib/rules.js'
 
 const PONYTAIL_SKILL = path.join(import.meta.dirname, '..', 'skills', 'ponytail', 'SKILL.md')
 const body = parseSkillFile(fs.readFileSync(PONYTAIL_SKILL, 'utf8')).content
@@ -46,4 +46,20 @@ test('the language rule rides on every level, including off', () => {
   for (const mode of ['lite', 'full', 'ultra', 'off']) {
     assert.ok(buildRules(mode, body).includes('始终用简体中文回复'), mode)
   }
+})
+
+test('each level keeps only its own example line', () => {
+  assert.ok(filterSkillBodyForMode(body, 'lite').includes('- lite: "Smaller option'))
+  assert.ok(!filterSkillBodyForMode(body, 'lite').includes('- ultra: "'))
+  assert.ok(filterSkillBodyForMode(body, 'ultra').includes('- ultra: "Not justified'))
+  assert.ok(!/^- (lite|ultra): "/m.test(filterSkillBodyForMode(body, 'full')))
+})
+
+test('buildReminder covers only the levels that ask for a line before tools', () => {
+  assert.match(buildReminder('lite'), /^PONYTAIL MODE ACTIVE — level: lite\. /)
+  assert.match(buildReminder('ultra'), /^PONYTAIL MODE ACTIVE — level: ultra\. /)
+  // Without an explicit way out, models answered the reminder with filler on small tasks.
+  assert.match(buildReminder('lite'), /If it does not apply, do not mention it at all/)
+  assert.equal(buildReminder('full'), undefined)
+  assert.equal(buildReminder('off'), undefined)
 })

@@ -14,9 +14,9 @@ write flag files, or persist anything.
 
 | Level | Trigger | What change |
 |-------|---------|-------------|
-| **Lite** | `/ponytail lite` | Build what was asked; first names the smaller option in one line. |
+| **Lite** | `/ponytail lite` | Build what was asked; when a smaller option exists, first names it in one line. |
 | **Full** | `/ponytail` | The smallest complete change, a check where the logic needs one, and a reply that names what was skipped and any risk. Default. |
-| **Ultra** | `/ponytail ultra` | Also names, before building, each requested part the need does not justify; still builds it unless you drop it. |
+| **Ultra** | `/ponytail ultra` | Also names, before building, any requested part the need does not justify; still builds it unless you drop it. |
 
 The level stays until you change it.
 

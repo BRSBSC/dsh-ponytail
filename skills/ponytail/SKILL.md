@@ -47,6 +47,9 @@ Never cut: validation at trust boundaries, error handling that prevents data los
 
 | Level | Behavior |
 |-------|----------|
-| **lite** | Build what was asked. Before any tool call or code, name the smaller option in one line and what it would save. |
+| **lite** | Build what was asked. If a smaller option exists, name it in one line before any tool call or code, with what it would save, like the example below. If none exists, say nothing; never invent one. |
 | **full** | The rules above. Default. |
-| **ultra** | Also question the request: before any tool call or code, name in one line each requested part the need does not justify and what dropping it would save. Still build all of it unless the user drops it. |
+| **ultra** | Also question the request: before any tool call or code, name in one line each requested part the need does not justify and what dropping it would save, like the example below. Skip the line when every part is justified. Still build all of it unless the user drops it. |
+
+- lite: "Smaller option: one in-memory script without the database layer, about 60% less code. Building what you asked."
+- ultra: "Not justified by the need: user roles (one user today, ~50 lines) and CSV export (nobody reads it yet, ~30 lines). Building all of it unless you drop them."
