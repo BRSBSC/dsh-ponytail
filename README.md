@@ -35,8 +35,8 @@ dsh plugin --profile desktop add github:BRSBSC/dsh-ponytail
 
 | 命令 | 效果 |
 |---|---|
-| `/ponytail ultra` | 切到 ultra 档：先质疑需求本身，再动手 |
-| `/ponytail lite` | 切到 lite 档：照需求做，但用一行说明更小的方案 |
+| `/ponytail ultra` | 切到 ultra 档：动手前先指出哪些需求理由不足，但仍然照做，除非你说不要 |
+| `/ponytail lite` | 切到 lite 档：照需求做，动手前先用一行说出更小的方案能省什么 |
 | `/ponytail full` | 默认档 |
 | `/ponytail off` | 关闭。模型会收到一行撤销声明，让它忽略之前的 ponytail 规则；中文回复的要求仍然保留 |
 | `/ponytail` | 当前关闭时切回 full；否则显示当前档位 |
@@ -46,14 +46,14 @@ dsh plugin --profile desktop add github:BRSBSC/dsh-ponytail
 
 ## 横幅
 
-在 Web 和桌面版里，进入会话后，输入框上方会显示一行横幅：
+在 Web 和桌面版里，输入框上方会显示一行横幅：
 
 - 四个档位按钮"精简 / 完整 / 极致 / 关闭"，当前档位高亮，点击即切换；
 - "审查"和"全库审计"会把 `/ponytail-review ` 或 `/ponytail-audit ` 放到输入框开头，已经写好的文字会保留在命令后面，作为审查范围，回车发送；草稿里有文件或会话引用时不会改动草稿，避免丢失引用；
 - 文字跟随 DSH 设置里的界面语言，在中文和英文之间切换；
 - 不管是在别的标签页切换，还是输入 `/ponytail` 命令切换，横幅都会自动更新。
 
-以下情况不显示横幅：新会话的空白页（发出第一条消息之前）、CLI/TUI。profile 只读时，四个档位按钮会禁用。
+CLI/TUI 里不显示横幅。profile 只读时，四个档位按钮会禁用。
 
 ## 配置
 
@@ -74,7 +74,7 @@ dsh plugin --profile desktop add github:BRSBSC/dsh-ponytail
 - 自带完整系统提示词的 preset（声明了 `complete` 段的，例如 `minimal`）会替换掉全部提示词段，ponytail 规则在其中不生效。
 - skill 优先级：Web 和桌面版里，每个 preset 自己挂载的 skill 来源（包括项目里的 `.dsh/skills`、`.agents/skills`，以及 `~/.dsh/skills`、`~/.agents/skills`）都会覆盖本插件注册的同名 skill。只有在单层组合（例如 TUI）里，本插件才优先于用户目录。
 - 浏览器端 `client.js` 手写成 DSH 内部的模块格式（`window.__ModuleLoader__`），DSH 升级后可能需要跟着调整，所以 `engines.dsh` 限定在 `<0.3.0`。
-- 桌面版的横幅只做了代码层面的推断，没有真机验证。
+- 横幅只在 Web 版实测过（2026-10-21，无头 Chromium）：渲染、点击切换、`/ponytail` 命令都正常。桌面版用的是同一份 `client.js`，但还没有在桌面版里实际点过。
 
 ### 与上游 ponytail 的差异
 
@@ -82,6 +82,7 @@ dsh plugin --profile desktop add github:BRSBSC/dsh-ponytail
 
 - 规则里的退出方式写成 `/ponytail off`（上游让模型听一句 "stop ponytail"，在 DSH 里切不了档位）。
 - help 卡片里的 `/plugin`、`PONYTAIL_DEFAULT_MODE`、`~/.config/ponytail/config.json`、`/ponytail band`、`$ponytail:` 前缀，换成了 DSH 的 `/ponytail`、设置项和重装方式。
+- `ponytail` 规则和 help 卡片里 lite、ultra 两档的说明，按 DSH 上的实测结果改写过（见 `docs/reports/2026-10-21-levels-real-test-v3.md`）。ultra 改成"指出理由不足的需求，但仍然照做"：原来的 push back 和 `Never cut: … anything the user asked for` 冲突，模型每次都选择照做。两档的专属动作都要求在调用任何工具或写代码之前完成：模型都记得这条规则，但在长任务里会把它拖到结尾，然后忘掉。
 
 6 个 skill 都注册成只能用斜杠命令调用（`modelInvocable: false`）：它们的正文带着同一套规则，让模型自己加载会在 `/ponytail off` 之后把规则带回来。
 
